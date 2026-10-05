@@ -43,6 +43,6 @@ grep -q '^PKG_FIXUP:=autoreconf' "$d/Makefile" \
 # firewall4 emits the fullcone statement, which needs the kernel module.
 d=$(pkgdir firewall4)
 grep -q 'kmod-nft-fullcone' "$d/Makefile" \
-	|| sed -i 's/+kmod-nft-nat \/+kmod-nft-nat +kmod-nft-fullcone \/' "$d/Makefile"
+	|| sed -i 's/+kmod-nft-nat /+kmod-nft-nat +kmod-nft-fullcone /' "$d/Makefile"
 grep -q 'kmod-nft-fullcone' "$d/Makefile" \
 	|| { echo "::error::could not add the kmod-nft-fullcone dependency to firewall4" >&2; exit 1; }
