@@ -1,0 +1,35 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: ru\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "Enable FullCone NAT"
+msgstr "Включить FullCone NAT"
+
+msgid "Enable FullCone NAT6"
+msgstr "Включить FullCone NAT6"
+
+msgid "Full cone NAT (NAT1) for UDP. Once a LAN host has sent a packet from a port, any host on the internet can reach it on the mapped external port. It replaces masquerading in zones that have masquerading enabled; other protocols are masqueraded as before."
+msgstr "Full cone NAT (NAT1) для UDP. Как только устройство в LAN отправило пакет с какого-то порта, любой узел в интернете может достучаться до него через соответствующий внешний порт. Заменяет маскарадинг в зонах, где он включён; остальные протоколы маскируются как раньше."
+
+msgid "FullCone NAT"
+msgstr "FullCone NAT"
+
+msgid "Grant access to FullCone NAT settings"
+msgstr "Доступ к настройкам FullCone NAT"
+
+msgid "IPv4, in zones with masquerading enabled."
+msgstr "IPv4, в зонах с включённым маскарадингом."
+
+msgid "IPv6, only in zones with IPv6 masquerading enabled. Usually not needed."
+msgstr "IPv6, только в зонах с включённым маскарадингом IPv6. Обычно не нужен."
+
+msgid "Kernel module"
+msgstr "Модуль ядра"
+
+msgid "nft_fullcone is loaded"
+msgstr "nft_fullcone загружен"
+
+msgid "nft_fullcone is not loaded - firewall4 will fall back to masquerading"
+msgstr "nft_fullcone не загружен — firewall4 вернётся к обычному маскарадингу"

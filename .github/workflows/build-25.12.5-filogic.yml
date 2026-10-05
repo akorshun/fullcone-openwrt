@@ -1,0 +1,286 @@
+name: Build fullcone apk (25.12.5 mediatek/filogic)
+# Builds FullCone NAT for an official OpenWrt 25.12.5 mediatek/filogic image as
+# standalone apk packages, against the official SDK, and publishes them as a
+# GitHub release:
+#
+#   kmod-nft-fullcone      the nftables "fullcone" expression (nft-fullcone)
+#   libnftnl11             + fullcone expression        (base feed, patched)
+#   nftables-json/-nojson  + "fullcone" statement       (base feed, patched)
+#   firewall4              + defaults.fullcone/fullcone6 (base feed, patched)
+#   luci-app-fullcone      Network -> Firewall -> FullCone NAT tab
+#
+# No kernel patch is involved. nft-fullcone only needs conntrack events, and
+# the official filogic kernel has CONFIG_NF_CONNTRACK_EVENTS=y because the
+# buildbot builds kmod-nf-conntrack-netlink. Without ImmortalWrt's
+# CONNTRACK_CHAIN_EVENTS hack there is a single conntrack event notifier, so
+# nf_conntrack_netlink and nft_fullcone cannot both own it.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'fullcone-25.12.5-filogic-*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SDK_URL: https://downloads.openwrt.org/releases/25.12.5/targets/mediatek/filogic/openwrt-sdk-25.12.5-mediatek-filogic_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+  SDK_SHA256: ff4a38a397caa2cfe1c39e18f84ddede14878221b3593c3f2c4cfe24e3ec4c25
+  SDK_DIR: openwrt-sdk-25.12.5-mediatek-filogic_gcc-14.3.0_musl.Linux-x86_64
+  # Published in targets/mediatek/filogic/kmods/ for 25.12.5. The SDK must
+  # arrive at this on its own; a mismatch means apk would refuse the module.
+  EXPECTED_KERNEL: 6.12.94-1
+  EXPECTED_VERMAGIC: 5a6c1f71be683ae9980b15d3ce73e24d
+  EXPECTED_ARCH: aarch64_cortex-a53
+
+jobs:
+  build:
+    name: fullcone apk (25.12.5 mediatek/filogic)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+            gettext git libncurses-dev libssl-dev python3-setuptools python3-dev \
+            python3 python3-pyelftools rsync swig unzip zlib1g-dev file wget zstd \
+            ccache libelf-dev libdw-dev liblz4-dev libzstd-dev libxml-parser-perl
+
+      - name: Fetch and unpack the official SDK
+        run: |
+          curl -fsSL --retry 3 -o sdk.tar.zst "$SDK_URL"
+          echo "$SDK_SHA256  sdk.tar.zst" | sha256sum -c -
+          tar --zstd -xf sdk.tar.zst
+          [ -d "$SDK_DIR" ] || { echo "::error::unpacked SDK directory $SDK_DIR not found"; exit 1; }
+          rm -f sdk.tar.zst
+          echo "----- SDK feeds.conf.default -----"
+          cat "$SDK_DIR/feeds.conf.default"
+
+      - name: Assert the SDK kernel has conntrack events
+        run: |
+          cd "$SDK_DIR"
+          cfg=$(find build_dir -path '*/linux-6.12.94/.config' | head -1)
+          [ -n "$cfg" ] || { echo "::error::no kernel .config in the SDK"; exit 1; }
+          echo "kernel config: $cfg"
+          grep -x 'CONFIG_NF_CONNTRACK_EVENTS=y' "$cfg" \
+            || { echo "::error::CONFIG_NF_CONNTRACK_EVENTS is not set - nft_fullcone would not load"; exit 1; }
+          if grep -q '^CONFIG_NF_CONNTRACK_CHAIN_EVENTS=y' "$cfg"; then
+            echo "::warning::CONFIG_NF_CONNTRACK_CHAIN_EVENTS is set - this is not a stock kernel"
+          fi
+
+      - name: Add this repository as a feed
+        run: |
+          cd "$SDK_DIR"
+          grep -q '^src-git --root=package base ' feeds.conf.default \
+            || { echo "::error::the SDK has no base feed - libnftnl, nftables and firewall4 come from it"; exit 1; }
+          cp feeds.conf.default feeds.conf
+          echo "src-link fullcone ${GITHUB_WORKSPACE}/package" >> feeds.conf
+          cat feeds.conf
+
+      - name: Update feeds
+        run: |
+          cd "$SDK_DIR"
+          # git.openwrt.org answers 504 now and then; a failed clone leaves a
+          # half-empty feed behind, so retry the update from scratch.
+          for i in 1 2 3 4; do
+            ./scripts/feeds update -a && break
+            echo "feeds update failed (attempt $i), retrying"
+            rm -rf feeds
+            sleep 30
+          done
+
+      - name: Patch the base-feed packages
+        run: |
+          cd "$SDK_DIR"
+          sh "$GITHUB_WORKSPACE/scripts/apply-overlay.sh" "$GITHUB_WORKSPACE/overlay"
+          # Re-index so the edited Makefiles are what the build sees.
+          ./scripts/feeds update -i
+          ./scripts/feeds install -a
+
+      - name: Configure
+        run: |
+          cd "$SDK_DIR"
+          {
+            echo 'CONFIG_PACKAGE_kmod-nft-fullcone=m'
+            echo 'CONFIG_PACKAGE_libnftnl=m'
+            echo 'CONFIG_PACKAGE_nftables-json=m'
+            echo 'CONFIG_PACKAGE_nftables-nojson=m'
+            echo 'CONFIG_PACKAGE_firewall4=m'
+            echo 'CONFIG_PACKAGE_luci-app-fullcone=m'
+            echo 'CONFIG_PACKAGE_luci-i18n-fullcone-ru=m'
+            echo 'CONFIG_BUILD_LOG=y'
+          } > .config
+          make defconfig
+          fail=0
+          for p in kmod-nft-fullcone libnftnl nftables-json nftables-nojson firewall4 \
+                   luci-app-fullcone luci-i18n-fullcone-ru; do
+            grep -qE "^CONFIG_PACKAGE_$p=[ym]" .config \
+              || { echo "::error::$p is not selected after defconfig"; fail=1; }
+          done
+          [ "$fail" = 0 ] || exit 1
+
+      - name: Build
+        run: |
+          cd "$SDK_DIR"
+          make package/fullconenat-nft/compile package/libnftnl/compile \
+               package/nftables/compile package/firewall4/compile \
+               package/luci-app-fullcone/compile -j$(nproc) V=s
+
+      - name: Verify the packages
+        run: |
+          cd "$SDK_DIR"
+          APK=staging_dir/host/bin/apk
+          ACTUAL=$(grep 'LINUX_VERMAGIC' include/kernel.mk | grep -oE '[0-9a-f]{32}' | head -1) || true
+          echo "SDK vermagic: $ACTUAL (expected $EXPECTED_VERMAGIC)"
+          [ "$ACTUAL" = "$EXPECTED_VERMAGIC" ] \
+            || { echo "::error::vermagic is $ACTUAL, expected $EXPECTED_VERMAGIC - apk would refuse the module"; exit 1; }
+
+          fail=0
+          for p in kmod-nft-fullcone libnftnl11 nftables-json nftables-nojson firewall4 \
+                   luci-app-fullcone luci-i18n-fullcone-ru; do
+            a=$(find bin -name "$p-[0-9]*.apk" | head -1) || true
+            if [ -z "$a" ]; then
+              echo "::error::$p apk was not produced"
+              fail=1
+              continue
+            fi
+            dump=$($APK adbdump "$a" 2>/dev/null) || true
+            ver=$(printf '%s\n' "$dump" | sed -n 's/^ *version: *//p' | head -1)
+            arch=$(printf '%s\n' "$dump" | sed -n 's/^ *arch: *//p' | head -1)
+            echo "--- $(basename "$a"): version ${ver:-?} arch ${arch:-?}"
+            case "$p" in
+              luci-*) [ "$arch" = noarch ] || { echo "::error::$p is $arch, expected noarch"; fail=1; } ;;
+              *) [ "$arch" = "$EXPECTED_ARCH" ] || { echo "::error::$p is $arch, expected $EXPECTED_ARCH"; fail=1; } ;;
+            esac
+            case "$p" in
+              kmod-nft-fullcone)
+                dep=$(printf '%s\n' "$dump" | grep -oE "kernel=[0-9.]+~[0-9a-f]{32}-r[0-9]+" | head -1) || true
+                echo "    depends on $dep"
+                case "$dep" in *"~$EXPECTED_VERMAGIC-"*) ;; *) echo "::error::kmod depends on $dep"; fail=1 ;; esac
+                printf '%s\n' "$dump" | grep -q 'nft_fullcone.ko' \
+                  || { echo "::error::nft_fullcone.ko is not in the package"; fail=1; } ;;
+              libnftnl11|nftables-*|firewall4)
+                # The official builds are r1/r2; ours must outrank them.
+                case "$ver" in *-r1[0-9][0-9]) ;; *) echo "::error::$p version $ver was not bumped"; fail=1 ;; esac ;;
+            esac
+            if [ "$p" = firewall4 ] && ! printf '%s\n' "$dump" | grep -q 'kmod-nft-fullcone'; then
+              echo "::error::firewall4 does not depend on kmod-nft-fullcone"
+              fail=1
+            fi
+          done
+
+          # Read the patched code back out of the build tree: the strings
+          # only exist if the patches were applied.
+          f=$(find build_dir -name 'fullcone.o' -path '*libnftnl*' | head -1) || true
+          [ -n "$f" ] || { echo "::error::libnftnl was built without src/expr/fullcone.c"; fail=1; }
+          grep -rqs 'zone-fullcone.uc' build_dir/target-*/firewall4-*/root/usr/share/firewall4/templates/ruleset.uc \
+            || { echo "::error::firewall4 ruleset.uc has no fullcone include"; fail=1; }
+          ko=$(find build_dir -name nft_fullcone.ko | head -1) || true
+          vm=$(strings "$ko" | grep -m1 '^vermagic=') || true
+          echo "nft_fullcone.ko: $vm"
+          case "$vm" in *6.12.94*aarch64*) ;; *) echo "::error::nft_fullcone.ko is not built for 6.12.94/aarch64"; fail=1 ;; esac
+          [ "$fail" = 0 ] || exit 1
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+          for p in kmod-nft-fullcone libnftnl11 nftables-json nftables-nojson firewall4 \
+                   luci-app-fullcone luci-i18n-fullcone-ru; do
+            find "$SDK_DIR/bin" -name "$p-[0-9]*.apk" -exec cp -v {} artifacts/ \;
+          done
+          ( cd artifacts && sha256sum *.apk > sha256sums )
+          ls -lh artifacts/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fullcone-25.12.5-filogic-${{ github.ref_name }}
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: FullCone NAT for OpenWrt 25.12.5 mediatek/filogic (${{ github.ref_name }})
+          files: artifacts/*
+          body: |
+            FullCone NAT (NAT1) for **OpenWrt 25.12.5, mediatek/filogic**
+            (`aarch64_cortex-a53`), as apk packages for an official image.
+
+            Built with the official 25.12.5 SDK, so the module carries the
+            published kernel ABI (`${{ env.EXPECTED_KERNEL }}-${{ env.EXPECTED_VERMAGIC }}`).
+            No kernel patch is needed.
+
+            | package | what |
+            |---|---|
+            | `kmod-nft-fullcone` | nftables `fullcone` expression ([nft-fullcone](https://github.com/fullcone-nat-nftables/nft-fullcone)) |
+            | `libnftnl11`, `nftables-json`, `nftables-nojson` | official versions + fullcone expression support |
+            | `firewall4` | official version + `defaults.fullcone` / `fullcone6` |
+            | `luci-app-fullcone`, `luci-i18n-fullcone-ru` | Network → Firewall → FullCone NAT |
+
+            The patched base packages carry `PKG_RELEASE` + 100, so they outrank
+            the official ones and `apk upgrade` keeps them.
+
+            ### Install
+
+            ```
+            cd /tmp
+            # download the apks of this release here, then
+            apk add --allow-untrusted ./kmod-nft-fullcone-*.apk ./libnftnl11-*.apk \
+                ./nftables-json-*.apk ./firewall4-*.apk \
+                ./luci-app-fullcone-*.apk ./luci-i18n-fullcone-ru-*.apk
+            uci set firewall.@defaults[0].fullcone='1'
+            uci commit firewall
+            service firewall restart
+            ```
+
+            Or tick **Network → Firewall → FullCone NAT → Enable FullCone NAT** in LuCI.
+
+            Check: `nft list chain inet fw4 srcnat_wan` shows a `fullcone` rule
+            instead of `masquerade`.
+
+            ### Revert
+
+            `uci set firewall.@defaults[0].fullcone='0'`, commit, restart the
+            firewall. To go back to the official packages:
+            `apk del luci-app-fullcone luci-i18n-fullcone-ru` and
+            `apk add --force-downgrade firewall4 nftables-json libnftnl11`,
+            then `apk del kmod-nft-fullcone`.
+
+            ### Limitation
+
+            The stock kernel has a single conntrack event notifier. If
+            `nf_conntrack_netlink` is loaded (`conntrack -E`, some QoS and
+            statistics tools), it and `nft_fullcone` compete for it.
+
+            ### Source
+
+            Patches and the nft-fullcone package are ImmortalWrt's
+            (`openwrt-25.12`), which ships the same libnftnl 1.3.1, nftables 1.1.6
+            and firewall4 2025.03.17~b6e51575 as OpenWrt 25.12.5. The firewall4
+            patch here does not change the default `/etc/config/firewall`.
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.ref_name }}
+          path: |
+            ${{ env.SDK_DIR }}/logs/
+            ${{ env.SDK_DIR }}/.config
+          retention-days: 14
+          if-no-files-found: ignore

@@ -1,0 +1,32 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+msgid "Enable FullCone NAT"
+msgstr ""
+
+msgid "Enable FullCone NAT6"
+msgstr ""
+
+msgid "Full cone NAT (NAT1) for UDP. Once a LAN host has sent a packet from a port, any host on the internet can reach it on the mapped external port. It replaces masquerading in zones that have masquerading enabled; other protocols are masqueraded as before."
+msgstr ""
+
+msgid "FullCone NAT"
+msgstr ""
+
+msgid "Grant access to FullCone NAT settings"
+msgstr ""
+
+msgid "IPv4, in zones with masquerading enabled."
+msgstr ""
+
+msgid "IPv6, only in zones with IPv6 masquerading enabled. Usually not needed."
+msgstr ""
+
+msgid "Kernel module"
+msgstr ""
+
+msgid "nft_fullcone is loaded"
+msgstr ""
+
+msgid "nft_fullcone is not loaded - firewall4 will fall back to masquerading"
+msgstr ""

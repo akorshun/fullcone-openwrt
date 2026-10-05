@@ -1,0 +1,17 @@
+{
+	"luci-app-fullcone": {
+		"description": "Grant access to FullCone NAT settings",
+		"read": {
+			"file": {
+				"/sys/module/nft_fullcone": [ "list" ]
+			},
+			"ubus": {
+				"file": [ "stat" ]
+			},
+			"uci": [ "firewall" ]
+		},
+		"write": {
+			"uci": [ "firewall" ]
+		}
+	}
+}
