@@ -17,7 +17,7 @@ OVERLAY=${1:?usage: apply-overlay.sh <overlay dir>}
 RELEASE_BUMP=${RELEASE_BUMP:-100}
 
 pkgdir() {
-	d=$(find feeds/base -maxdepth 3 -type d -name "$1" | head -1)
+	d=$(find -L feeds/base -maxdepth 5 -type d -name "$1" -not -path "*/.git/*" | head -1)
 	[ -n "$d" ] && [ -f "$d/Makefile" ] || { echo "::error::$1 not found in the base feed" >&2; exit 1; }
 	echo "$d"
 }
