@@ -137,6 +137,24 @@ jobs:
                package/nftables/compile package/firewall4/compile \
                package/luci-app-fullcone/compile -j$(nproc) V=s
 
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+          for p in kmod-nft-fullcone libnftnl11 nftables-json nftables-nojson firewall4 \
+                   luci-app-fullcone luci-i18n-fullcone-ru; do
+            find "$SDK_DIR/bin" -name "$p-[0-9]*.apk" -exec cp -v {} artifacts/ \;
+          done
+          ( cd artifacts && sha256sum *.apk > sha256sums )
+          ls -lh artifacts/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fullcone-25.12.5-filogic-${{ github.ref_name }}
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: error
+
       - name: Verify the packages
         run: |
           cd "$SDK_DIR"
@@ -180,35 +198,30 @@ jobs:
             fi
           done
 
-          # Read the patched code back out of the build tree: the strings
-          # only exist if the patches were applied.
-          f=$(find build_dir -name 'fullcone.o' -path '*libnftnl*' | head -1) || true
-          [ -n "$f" ] || { echo "::error::libnftnl was built without src/expr/fullcone.c"; fail=1; }
-          grep -rqs 'zone-fullcone.uc' build_dir/target-*/firewall4-*/root/usr/share/firewall4/templates/ruleset.uc \
-            || { echo "::error::firewall4 ruleset.uc has no fullcone include"; fail=1; }
-          ko=$(find build_dir -name nft_fullcone.ko | head -1) || true
-          vm=$(strings "$ko" | grep -m1 '^vermagic=') || true
+          # Read the patched code back out of the packages themselves: the
+          # SDK clears build_dir as it goes, and the apks are what ships.
+          x=$(mktemp -d)
+          for p in libnftnl11 nftables-json firewall4 kmod-nft-fullcone; do
+            a=$(find bin -name "$p-[0-9]*.apk" | head -1) || true
+            [ -n "$a" ] || continue
+            mkdir -p "$x/$p"
+            $APK --allow-untrusted extract --no-chown --destination "$x/$p" "$a" || { echo "::error::could not extract $a"; fail=1; }
+          done
+          echo "----- extracted -----"
+          find "$x" -type f | sed "s|$x/||" | sort
+          grep -rqa 'fullcone' "$x/libnftnl11" || { echo "::error::libnftnl11 has no fullcone expression"; fail=1; }
+          grep -rqa 'fullcone' "$x/nftables-json" || { echo "::error::nftables-json has no fullcone statement"; fail=1; }
+          [ -f "$x/firewall4/usr/share/firewall4/templates/zone-fullcone.uc" ] || { echo "::error::firewall4 has no zone-fullcone.uc template"; fail=1; }
+          grep -q 'nft_try_fullcone' "$x/firewall4/usr/share/ucode/fw4.uc" 2>/dev/null || { echo "::error::firewall4 fw4.uc has no fullcone support"; fail=1; }
+          if grep -q 'fullcone' "$x/firewall4/etc/config/firewall" 2>/dev/null; then
+            echo "::error::firewall4 default config mentions fullcone - it must stay off by default"
+            fail=1
+          fi
+          ko=$(find "$x/kmod-nft-fullcone" -name nft_fullcone.ko | head -1) || true
+          vm=$(strings "$ko" 2>/dev/null | grep -m1 '^vermagic=') || true
           echo "nft_fullcone.ko: $vm"
           case "$vm" in *6.12.94*aarch64*) ;; *) echo "::error::nft_fullcone.ko is not built for 6.12.94/aarch64"; fail=1 ;; esac
           [ "$fail" = 0 ] || exit 1
-
-      - name: Collect artifacts
-        run: |
-          mkdir -p artifacts
-          for p in kmod-nft-fullcone libnftnl11 nftables-json nftables-nojson firewall4 \
-                   luci-app-fullcone luci-i18n-fullcone-ru; do
-            find "$SDK_DIR/bin" -name "$p-[0-9]*.apk" -exec cp -v {} artifacts/ \;
-          done
-          ( cd artifacts && sha256sum *.apk > sha256sums )
-          ls -lh artifacts/
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: fullcone-25.12.5-filogic-${{ github.ref_name }}
-          path: artifacts/
-          retention-days: 30
-          if-no-files-found: error
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
