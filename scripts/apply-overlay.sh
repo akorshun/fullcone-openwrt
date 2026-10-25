@@ -3,7 +3,8 @@
 # fullcone-capable builds. Run from the SDK root after `feeds update`.
 #
 # The patches are ImmortalWrt's, which carries the very same package versions
-# as OpenWrt 25.12.5 (libnftnl 1.3.1, nftables 1.1.6, firewall4 b6e51575), so
+# as OpenWrt 25.12.5 and 25.12.6 (libnftnl 1.3.1, nftables 1.1.6, firewall4
+# b6e51575), so
 # they go in unmodified - except firewall4's, which no longer rewrites the
 # default /etc/config/firewall: installing these packages must not switch
 # anything on by itself.

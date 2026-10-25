@@ -1,7 +1,8 @@
 # fullcone-openwrt
 
-FullCone NAT (NAT1) for **official OpenWrt 25.12.5 images**, as standalone apk
-packages built against the official SDK. No custom firmware, no kernel patch.
+FullCone NAT (NAT1) for **official OpenWrt 25.12.5 and 25.12.6 images**, as
+standalone apk packages built against the official SDK. No custom firmware, no
+kernel patch.
 
 | package | what |
 |---|---|
@@ -10,7 +11,8 @@ packages built against the official SDK. No custom firmware, no kernel patch.
 | `firewall4` | the official version + `defaults.fullcone` / `fullcone6` |
 | `luci-app-fullcone`, `luci-i18n-fullcone-ru` | Network → Firewall → FullCone NAT |
 
-Targets: `mediatek/filogic` (`fullcone-25.12.5-filogic-rN` releases).
+Targets: `mediatek/filogic` (`fullcone-25.12.5-filogic-rN` and
+`fullcone-25.12.6-filogic-rN` releases).
 
 ## How it is built
 
@@ -21,7 +23,8 @@ the official packages, and builds them together with `package/`.
 
 The patches and the `fullconenat-nft` package come from ImmortalWrt's
 `openwrt-25.12` branch, which carries exactly the package versions OpenWrt
-25.12.5 ships (libnftnl 1.3.1, nftables 1.1.6, firewall4 b6e51575). The only
+25.12.5 and 25.12.6 ship (libnftnl 1.3.1, nftables 1.1.6, firewall4 b6e51575).
+The only
 change: the firewall4 patch no longer edits the default `/etc/config/firewall`,
 so installing the packages switches nothing on.
 
