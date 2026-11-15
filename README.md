@@ -1,6 +1,6 @@
 # fullcone-openwrt
 
-FullCone NAT (NAT1) for **official OpenWrt 25.12.5 and 25.12.6 images**, as
+FullCone NAT (NAT1) for **official OpenWrt 25.12.5, 25.12.6 and snapshot images**, as
 standalone apk packages built against the official SDK. No custom firmware, no
 kernel patch.
 
@@ -11,8 +11,13 @@ kernel patch.
 | `firewall4` | the official version + `defaults.fullcone` / `fullcone6` |
 | `luci-app-fullcone`, `luci-i18n-fullcone-ru` | Network → Firewall → FullCone NAT |
 
-Targets: `mediatek/filogic` (`fullcone-25.12.5-filogic-rN` and
-`fullcone-25.12.6-filogic-rN` releases).
+Targets: `mediatek/filogic` (`fullcone-25.12.5-filogic-rN`,
+`fullcone-25.12.6-filogic-rN` and `fullcone-snapshot-rREV-filogic-rN`
+releases).
+
+A snapshot build fits exactly one snapshot revision: the kernel module carries
+that snapshot's vermagic. `build-snapshot-filogic.yml` pins the revision, the
+SDK checksum and the vermagic; bump all three for a newer snapshot.
 
 ## How it is built
 
@@ -27,6 +32,10 @@ The patches and the `fullconenat-nft` package come from ImmortalWrt's
 The only
 change: the firewall4 patch no longer edits the default `/etc/config/firewall`,
 so installing the packages switches nothing on.
+
+The snapshot build uses `overlay-snapshot/` instead: the same patches from
+ImmortalWrt `master` (libnftnl 1.3.2, nftables 1.1.7, firewall4 3722eadc), the
+firewall4 one refreshed to apply without fuzz.
 
 `luci-app-fullcone` is a separate tab rather than a patched
 `luci-app-firewall`: the luci feed of a release keeps getting rebuilt, and a
