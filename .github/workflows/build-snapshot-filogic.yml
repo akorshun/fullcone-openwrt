@@ -249,7 +249,7 @@ jobs:
             No kernel patch is needed.
 
             **Only for this snapshot.** Check `cat /etc/openwrt_version` and
-            `apk list -I kernel` (`6.18.60~0011ea4d…`) first. After a
+            `apk list -I kernel` (`6.18.60~0011ea4d...`) first. After a
             sysupgrade to a newer snapshot the kernel module no longer loads;
             that needs a new build.
 
