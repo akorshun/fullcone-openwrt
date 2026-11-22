@@ -1,5 +1,5 @@
-name: Build fullcone apk (snapshot r38259 mediatek/filogic)
-# Builds FullCone NAT for an official OpenWrt SNAPSHOT r38259-7b46f9593e
+name: Build fullcone apk (snapshot r38523 mediatek/filogic)
+# Builds FullCone NAT for an official OpenWrt SNAPSHOT r38523-14a07b78e9
 # mediatek/filogic image as
 # standalone apk packages, against the official SDK, and publishes them as a
 # GitHub release:
@@ -30,23 +30,23 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SDK_URL: https://downloads.openwrt.org/snapshots/targets/mediatek/filogic/openwrt-sdk-mediatek-filogic_gcc-14.4.0_musl.Linux-x86_64.tar.zst
-  SDK_SHA256: 685538bfbc658bc5594cb4f3aa092bc71773dedb9ea7545828c346b7f12f8569
-  SDK_DIR: openwrt-sdk-mediatek-filogic_gcc-14.4.0_musl.Linux-x86_64
+  SDK_URL: https://downloads.openwrt.org/snapshots/targets/mediatek/filogic/openwrt-sdk-mediatek-filogic_gcc-15.3.0_musl.Linux-x86_64.tar.zst
+  SDK_SHA256: 3e331f86852efef498cf7004a81cb7e9438acf2cf14f18daf38fa63ffae488eb
+  SDK_DIR: openwrt-sdk-mediatek-filogic_gcc-15.3.0_musl.Linux-x86_64
   # Snapshots roll: the SDK at SDK_URL is replaced with every buildbot run,
   # and a module built against one snapshot does not load on another. These
   # pin the snapshot this build is for - bump them together for a new one
   # (version.buildinfo, sha256sums and kmods/ next to the SDK).
-  EXPECTED_REVISION: r38259-7b46f9593e
+  EXPECTED_REVISION: r38523-14a07b78e9
   # Published in targets/mediatek/filogic/kmods/ for this snapshot. The SDK must
   # arrive at this on its own; a mismatch means apk would refuse the module.
-  EXPECTED_KERNEL: 6.18.60-1
+  EXPECTED_KERNEL: 6.18.64-1
   EXPECTED_VERMAGIC: 0011ea4d08f27770cb30251cb10b1094
   EXPECTED_ARCH: aarch64_cortex-a53
 
 jobs:
   build:
-    name: fullcone apk (snapshot r38259 mediatek/filogic)
+    name: fullcone apk (snapshot r38523 mediatek/filogic)
     runs-on: ubuntu-24.04
     timeout-minutes: 120
 
@@ -79,7 +79,7 @@ jobs:
       - name: Assert the SDK kernel has conntrack events
         run: |
           cd "$SDK_DIR"
-          cfg=$(find build_dir -path '*/linux-6.18.60/.config' | head -1)
+          cfg=$(find build_dir -path '*/linux-6.18.64/.config' | head -1)
           [ -n "$cfg" ] || { echo "::error::no kernel .config in the SDK"; exit 1; }
           echo "kernel config: $cfg"
           grep -x 'CONFIG_NF_CONNTRACK_EVENTS=y' "$cfg" \
@@ -229,7 +229,7 @@ jobs:
           ko=$(find "$x/kmod-nft-fullcone" -name nft_fullcone.ko | head -1) || true
           vm=$(strings "$ko" 2>/dev/null | grep -m1 '^vermagic=') || true
           echo "nft_fullcone.ko: $vm"
-          case "$vm" in *6.18.60*aarch64*) ;; *) echo "::error::nft_fullcone.ko is not built for 6.18.60/aarch64"; fail=1 ;; esac
+          case "$vm" in *6.18.64*aarch64*) ;; *) echo "::error::nft_fullcone.ko is not built for 6.18.64/aarch64"; fail=1 ;; esac
           [ "$fail" = 0 ] || exit 1
 
       - name: Create GitHub Release
@@ -237,7 +237,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: FullCone NAT for OpenWrt snapshot r38259 mediatek/filogic (${{ github.ref_name }})
+          name: FullCone NAT for OpenWrt snapshot r38523 mediatek/filogic (${{ github.ref_name }})
           files: artifacts/*
           body: |
             FullCone NAT (NAT1) for the official **OpenWrt SNAPSHOT
@@ -249,7 +249,7 @@ jobs:
             No kernel patch is needed.
 
             **Only for this snapshot.** Check `cat /etc/openwrt_version` and
-            `apk list -I kernel` (`6.18.60~0011ea4d...`) first. After a
+            `apk list -I kernel` (`6.18.64~0011ea4d...`) first. After a
             sysupgrade to a newer snapshot the kernel module no longer loads;
             that needs a new build.
 
